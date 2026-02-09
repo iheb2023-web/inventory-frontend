@@ -99,6 +99,19 @@ export class AdminDashboardService {
     return this.http.put<void>(`${this.apiBaseUrl}/api/alerts/${id}/resolve`, {});
   }
 
+  // Sale methods
+  getProductByBarcode(barcode: string): Observable<{ success: boolean; message: string; data: ProductWithStock }> {
+    return this.http.get<{ success: boolean; message: string; data: ProductWithStock }>(`${this.apiBaseUrl}/api/products/barcode/${barcode}`);
+  }
+
+  recordSale(productId: number, quantity: number): Observable<{ success: boolean; message: string }> {
+    return this.http.post<{ success: boolean; message: string }>(`${this.apiBaseUrl}/api/sales`, { productId, quantity });
+  }
+
+  recordMultipleSale(items: Array<{ productId: number; quantity: number }>): Observable<{ success: boolean; message: string }> {
+    return this.http.post<{ success: boolean; message: string }>(`${this.apiBaseUrl}/api/sales/multiple`, { items });
+  }
+
   connectRfidWs(): void {
     if (this.connected || this.stompClient) {
       return;

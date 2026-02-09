@@ -68,6 +68,13 @@
           <p class="card-unit">étagères</p>
           <p class="card-action">Gérer les étagères →</p>
         </div>
+        <div class="dashboard-card" (click)="selectView('sales')">
+          <div class="card-icon">💰</div>
+          <h2>Point de Vente</h2>
+          <p class="card-value">—</p>
+          <p class="card-unit">ventes</p>
+          <p class="card-action">Enregistrer une vente →</p>
+        </div>
       </section>
     }
   }
@@ -573,6 +580,176 @@
           <p class="empty-subtitle">Toutes les étagères sont remplies correctement</p>
         </div>
       }
+    </section>
+  </div>
+}
+
+<!-- VUE VENTES -->
+@if (selectedView() === 'sales') {
+  <div class="details-view">
+    <header class="details-header">
+      <button class="back-btn" (click)="goBack()">← Retour</button>
+      <h2>Point de Vente</h2>
+    </header>
+
+    <section class="sales-section">
+      <div class="sales-form-container">
+        <div class="sales-form-header">
+          <h3>💰 Enregistrer une vente</h3>
+          <p class="subtitle">Scannez ou entrez le code-barres du produit</p>
+        </div>
+
+        <form [formGroup]="saleForm" class="sale-form">
+          <!-- Recherche par code-barres -->
+          <div class="barcode-search-section">
+            <label class="form-field">
+              <span>Code-barres du produit</span>
+              <div class="input-with-button">
+                <input 
+                  type="text" 
+                  formControlName="barcode" 
+                  placeholder="Scannez ou tapez le code-barres"
+                  (keyup.enter)="searchProductByBarcode()"
+                  autofocus
+                />
+                <button 
+                  type="button" 
+                  class="btn-search" 
+                  (click)="searchProductByBarcode()"
+                  [disabled]="isSearchingProduct() || !saleForm.controls.barcode.value.trim()"
+                >
+                  @if (isSearchingProduct()) {
+                    <span class="spinner-small"></span>
+                  } @else {
+                    🔍 Rechercher
+                  }
+                </button>
+              </div>
+            </label>
+          </div>
+
+          @if (saleErrorMessage()) {
+            <div class="alert error" role="alert">
+              <span class="alert-icon">⚠️</span>
+              {{ saleErrorMessage() }}
+            </div>
+          }
+
+          @if (saleSuccessMessage()) {
+            <div class="alert success" role="status">
+              <span class="alert-icon">✓</span>
+              {{ saleSuccessMessage() }}
+            </div>
+          }
+
+          <!-- Détails du produit trouvé -->
+          @if (foundProduct()) {
+            <div class="product-details-card">
+              <div class="product-details-header">
+                <h4>📦 Produit trouvé</h4>
+              </div>
+              <div class="product-details-body">
+                <div class="detail-row">
+                  <span class="detail-label">Nom:</span>
+                  <span class="detail-value"><strong>{{ foundProduct()!.name }}</strong></span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Code-barres:</span>
+                  <span class="detail-value"><code>{{ foundProduct()!.barcode }}</code></span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Stock disponible:</span>
+                  <span class="detail-value stock-available">
+                    <span class="stock-badge">{{ foundProduct()!.stockQuantity }} unités</span>
+                  </span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Poids unitaire:</span>
+                  <span class="detail-value">{{ foundProduct()!.unitWeight }} kg</span>
+                </div>
+                @if (foundProduct()!.description) {
+                  <div class="detail-row full-width">
+                    <span class="detail-label">Description:</span>
+                    <span class="detail-value">{{ foundProduct()!.description }}</span>
+                  </div>
+                }
+              </div>
+
+              <!-- Formulaire de quantité -->
+              <div class="quantity-section">
+                <label class="form-field">
+                  <span>Quantité à vendre</span>
+                  <input 
+                    type="number" 
+                    formControlName="quantity" 
+                    min="1" 
+                    [max]="foundProduct()!.stockQuantity"
+                    placeholder="1"
+                  />
+                  @if (saleForm.controls.quantity.touched && saleForm.controls.quantity.invalid) {
+                    <span class="error">La quantité doit être au moins 1</span>
+                  }
+                </label>
+
+                <button 
+                  type="button" 
+                  class="btn-process-sale" 
+                  (click)="addToCart()"
+                  [disabled]="saleForm.controls.quantity.invalid || saleForm.controls.quantity.value > foundProduct()!.stockQuantity"
+                >
+                  ➕ Ajouter au panier
+                </button>
+              </div>
+            </div>
+          }
+
+          @if (cart().length > 0) {
+            <div class="cart-section">
+              <div class="cart-header">
+                <h4>🛒 Panier</h4>
+                <span class="cart-total">{{ cartTotal() }} article(s)</span>
+              </div>
+
+              <div class="cart-items">
+                @for (item of cart(); track item.product.id; let i = $index) {
+                  <div class="cart-item">
+                    <div class="cart-item-info">
+                      <span class="cart-item-name">{{ item.product.name }}</span>
+                      <span class="cart-item-barcode">{{ item.product.barcode }}</span>
+                    </div>
+                    <div class="cart-item-qty">
+                      <input
+                        type="number"
+                        min="1"
+                        [max]="item.product.stockQuantity"
+                        [value]="item.quantity"
+                        (change)="updateCartItemQuantity(i, $any($event.target).valueAsNumber)"
+                      />
+                      <button type="button" class="btn-remove" (click)="removeFromCart(i)">✕</button>
+                    </div>
+                  </div>
+                }
+              </div>
+
+              <div class="cart-actions">
+                <button
+                  type="button"
+                  class="btn-process-sale"
+                  (click)="processSale()"
+                  [disabled]="isProcessingSale()"
+                >
+                  @if (isProcessingSale()) {
+                    <span class="spinner"></span>
+                    Traitement en cours...
+                  } @else {
+                    💰 Valider la vente
+                  }
+                </button>
+              </div>
+            </div>
+          }
+        </form>
+      </div>
     </section>
   </div>
 }

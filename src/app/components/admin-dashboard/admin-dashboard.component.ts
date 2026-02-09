@@ -64,7 +64,7 @@ export class AdminDashboardComponent implements OnInit {
   readonly formMode = signal<'new_rfid' | 'add_product' | 'edit_product'>('add_product');
   readonly editingProductId = signal<number | null>(null);
 
-  readonly selectedView = signal<'home' | 'stock' | 'store' | 'products' | 'shelves' | 'alerts'>('home');
+  readonly selectedView = signal<'home' | 'stock' | 'store' | 'products' | 'shelves' | 'alerts' | 'sales'>('home');
 
   readonly productForm = this.formBuilder.nonNullable.group({
     name: ['', [Validators.required, Validators.maxLength(120)]],
@@ -79,6 +79,21 @@ export class AdminDashboardComponent implements OnInit {
     maxWeight: [0, [Validators.required, Validators.min(0.1)]],
     minThreshold: [0, [Validators.required, Validators.min(0.1)]]
   });
+
+  // Sale form and related signals
+  readonly saleForm = this.formBuilder.nonNullable.group({
+    barcode: ['', [Validators.required]],
+    quantity: [1, [Validators.required, Validators.min(1)]]
+  });
+  readonly foundProduct = signal<ProductWithStock | null>(null);
+  readonly isSearchingProduct = signal(false);
+  readonly isProcessingSale = signal(false);
+  readonly saleErrorMessage = signal<string | null>(null);
+  readonly saleSuccessMessage = signal<string | null>(null);
+  
+  // Cart system for multiple products
+  readonly cart = signal<Array<{ product: ProductWithStock; quantity: number }>>([]);
+  readonly cartTotal = signal(0);
 
   ngOnInit(): void {
     this.loadDashboardData();
@@ -629,7 +644,7 @@ export class AdminDashboardComponent implements OnInit {
       });
   }
 
-  selectView(view: 'home' | 'stock' | 'store' | 'products' | 'shelves' | 'alerts'): void {
+  selectView(view: 'home' | 'stock' | 'store' | 'products' | 'shelves' | 'alerts' | 'sales'): void {
     this.selectedView.set(view);
     if (view === 'stock') {
       this.loadEventsByLocation('STOCK');
@@ -647,6 +662,164 @@ export class AdminDashboardComponent implements OnInit {
     if (view === 'alerts') {
       this.loadAlerts();
     }
+    if (view === 'sales') {
+      this.resetSaleForm();
+    }
+  }
+
+  // Sale methods
+  resetSaleForm(): void {
+    this.saleForm.reset({ barcode: '', quantity: 1 });
+    this.foundProduct.set(null);
+    this.saleErrorMessage.set(null);
+    this.saleSuccessMessage.set(null);
+    this.cart.set([]);
+    this.updateCartTotal();
+  }
+
+  updateCartTotal(): void {
+    const items = this.cart();
+    const total = items.reduce((sum, item) => sum + item.quantity, 0);
+    this.cartTotal.set(total);
+  }
+
+  searchProductByBarcode(): void {
+    const barcode = this.saleForm.controls.barcode.value.trim();
+    if (!barcode) {
+      this.saleErrorMessage.set('Veuillez entrer un code-barres');
+      return;
+    }
+
+    this.isSearchingProduct.set(true);
+    this.saleErrorMessage.set(null);
+    this.foundProduct.set(null);
+
+    this.dashboardService
+      .getProductByBarcode(barcode)
+      .pipe(
+        finalize(() => this.isSearchingProduct.set(false)),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe({
+        next: (response) => {
+          this.foundProduct.set(response.data);
+          this.saleErrorMessage.set(null);
+        },
+        error: (err) => {
+          console.error('Error searching product:', err);
+          this.saleErrorMessage.set(err.error?.message || 'Produit non trouvé ou non disponible en magasin');
+          this.foundProduct.set(null);
+        }
+      });
+  }
+
+  addToCart(): void {
+    if (!this.foundProduct()) {
+      this.saleErrorMessage.set('Veuillez d\'abord rechercher un produit');
+      return;
+    }
+
+    const quantity = this.saleForm.controls.quantity.value;
+    if (quantity < 1) {
+      this.saleErrorMessage.set('La quantité doit être au moins 1');
+      return;
+    }
+
+    const product = this.foundProduct()!;
+    
+    // Check if product already in cart
+    const currentCart = [...this.cart()];
+    const existingIndex = currentCart.findIndex(item => item.product.id === product.id);
+    
+    let totalQuantityInCart = quantity;
+    if (existingIndex >= 0) {
+      totalQuantityInCart += currentCart[existingIndex].quantity;
+    }
+
+    if (totalQuantityInCart > product.stockQuantity) {
+      this.saleErrorMessage.set(`Stock insuffisant (disponible: ${product.stockQuantity})`);
+      return;
+    }
+
+    if (existingIndex >= 0) {
+      // Update existing item
+      currentCart[existingIndex].quantity = totalQuantityInCart;
+    } else {
+      // Add new item
+      currentCart.push({ product, quantity });
+    }
+
+    this.cart.set(currentCart);
+    this.updateCartTotal();
+    
+    // Reset form for next product
+    this.saleForm.controls.barcode.setValue('');
+    this.saleForm.controls.quantity.setValue(1);
+    this.foundProduct.set(null);
+    this.saleSuccessMessage.set(`${product.name} ajouté au panier`);
+    setTimeout(() => this.saleSuccessMessage.set(null), 2000);
+  }
+
+  removeFromCart(index: number): void {
+    const currentCart = [...this.cart()];
+    currentCart.splice(index, 1);
+    this.cart.set(currentCart);
+    this.updateCartTotal();
+  }
+
+  updateCartItemQuantity(index: number, quantity: number): void {
+    if (quantity < 1) return;
+    
+    const currentCart = [...this.cart()];
+    const item = currentCart[index];
+    
+    if (quantity > item.product.stockQuantity) {
+      this.saleErrorMessage.set(`Stock insuffisant pour ${item.product.name} (disponible: ${item.product.stockQuantity})`);
+      setTimeout(() => this.saleErrorMessage.set(null), 3000);
+      return;
+    }
+    
+    currentCart[index].quantity = quantity;
+    this.cart.set(currentCart);
+    this.updateCartTotal();
+  }
+
+  processSale(): void {
+    const items = this.cart();
+    
+    if (items.length === 0) {
+      this.saleErrorMessage.set('Le panier est vide. Veuillez ajouter des produits.');
+      return;
+    }
+
+    this.isProcessingSale.set(true);
+    this.saleErrorMessage.set(null);
+
+    const saleItems = items.map(item => ({
+      productId: item.product.id,
+      quantity: item.quantity
+    }));
+
+    this.dashboardService
+      .recordMultipleSale(saleItems)
+      .pipe(
+        finalize(() => this.isProcessingSale.set(false)),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe({
+        next: (response) => {
+          const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
+          this.saleSuccessMessage.set(`Vente enregistrée: ${totalItems} article(s) de ${items.length} produit(s) différent(s)`);
+          this.resetSaleForm();
+          this.loadStats();
+          this.loadStoreStock();
+          setTimeout(() => this.saleSuccessMessage.set(null), 5000);
+        },
+        error: (err) => {
+          console.error('Error processing sale:', err);
+          this.saleErrorMessage.set(err.error?.message || 'Erreur lors de l\'enregistrement de la vente');
+        }
+      });
   }
 
   goBack(): void {
