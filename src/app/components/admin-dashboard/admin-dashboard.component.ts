@@ -112,6 +112,8 @@ export class AdminDashboardComponent implements OnInit {
       )
       .subscribe({
         next: (response) => {
+          console.log('📊 Stats reçues du backend:', JSON.stringify(response.data, null, 2));
+          console.log('Stock Principal (totalStock):', response.data.totalStock);
           this.stats.set(response.data);
         },
         error: (err) => {
@@ -189,8 +191,9 @@ export class AdminDashboardComponent implements OnInit {
     }
     // Reload events after RFID event
     this.loadRecentEvents();
-    // Reload shelves when weight changes (ENTRY/EXIT events)
+    // Reload stats and shelves when weight changes (ENTRY/EXIT events)
     if (event.type === 'ENTRY' || event.type === 'EXIT') {
+      this.loadStats();
       this.loadShelves();
     }
   }
