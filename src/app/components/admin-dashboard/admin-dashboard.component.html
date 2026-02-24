@@ -18,9 +18,25 @@
 
   @if (alertToast()) {
     <div class="alert-toast" role="status" (click)="goToAlertsFromToast()">
-      <div class="toast-icon">⚠️</div>
+      <div class="toast-icon">
+        @if (alertToast()!.alert.alertType === 'LOW_WEIGHT') {
+          ⚠️
+        } @else if (alertToast()!.alert.alertType === 'PRODUCT_WITHOUT_STOCK_EXIT') {
+          ❌
+        } @else {
+          🔔
+        }
+      </div>
       <div class="toast-content">
-        <p class="toast-title">Poids insuffisant</p>
+        <p class="toast-title">
+          @if (alertToast()!.alert.alertType === 'LOW_WEIGHT') {
+            Poids insuffisant
+          } @else if (alertToast()!.alert.alertType === 'PRODUCT_WITHOUT_STOCK_EXIT') {
+            Problème détecté
+          } @else {
+            Alerte
+          }
+        </p>
         <p class="toast-message">{{ alertToast()!.message }}</p>
       </div>
       <button class="toast-action" type="button">Voir alertes</button>
@@ -200,11 +216,11 @@
                   <div class="stock-metrics-row">
                     <div class="stock-metric-small">
                       <span class="metric-label-small">Poids unitaire</span>
-                      <span class="metric-value-small">{{ item.unitWeight }} kg</span>
+                      <span class="metric-value-small">{{ item.unitWeight }} g</span>
                     </div>
                     <div class="stock-metric-small">
                       <span class="metric-label-small">Poids total</span>
-                      <span class="metric-value-small weight-total">{{ (item.quantity * item.unitWeight).toFixed(3) }} kg</span>
+                      <span class="metric-value-small weight-total">{{ (item.quantity * item.unitWeight).toFixed(0) }} g</span>
                     </div>
                   </div>
                 </div>
@@ -254,7 +270,8 @@
                 <th>Nom</th>
                 <th>Code-barres</th>
                 <th>Tag RFID</th>
-                <th>Poids (kg)</th>
+                <th>Poids (g)</th>
+                <th>Prix unitaire (DT)</th>
                 <th>Stock</th>
                 <th>Description</th>
                 <th>Actions</th>
@@ -267,6 +284,7 @@
                   <td><code>{{ product.barcode }}</code></td>
                   <td><code class="rfid-code">{{ product.rfidTag }}</code></td>
                   <td class="text-center">{{ product.unitWeight }}</td>
+                  <td class="text-center price-column">{{ formatPrice(product.unitPrice) }} DT</td>
                   <td class="text-center stock-quantity">
                     <span class="stock-badge">{{ product.stockQuantity }}</span>
                   </td>
@@ -342,7 +360,7 @@
                 <div class="weight-display">
                   <div class="current-weight">
                     <span class="weight-label">Poids Actuel</span>
-                    <span class="weight-value">{{ shelf.currentWeight }} kg</span>
+                    <span class="weight-value">{{ shelf.currentWeight }} g</span>
                   </div>
                   <div class="weight-progress">
                     <div class="progress-bar">
@@ -362,14 +380,14 @@
                     <span class="metric-icon">📏</span>
                     <div class="metric-content">
                       <span class="metric-label">Seuil Min</span>
-                      <span class="metric-value">{{ shelf.minThreshold }} kg</span>
+                      <span class="metric-value">{{ shelf.minThreshold }} g</span>
                     </div>
                   </div>
                   <div class="metric-item">
                     <span class="metric-icon">⚖️</span>
                     <div class="metric-content">
                       <span class="metric-label">Poids Max</span>
-                      <span class="metric-value">{{ shelf.maxWeight }} kg</span>
+                      <span class="metric-value">{{ shelf.maxWeight }} g</span>
                     </div>
                   </div>
                 </div>
@@ -467,10 +485,18 @@
           </label>
 
           <label class="form-field">
-            <span>Poids unitaire (kg) *</span>
-            <input type="number" formControlName="unitWeight" min="0.001" step="0.001" placeholder="0.5" />
+            <span>Poids unitaire (g) *</span>
+            <input type="number" formControlName="unitWeight" min="1" step="1" placeholder="500" />
             @if (productForm.controls.unitWeight.touched && productForm.controls.unitWeight.invalid) {
-              <span class="error">Le poids doit être supérieur à 0.</span>
+              <span class="error">Le poids doit être au moins 1 gramme.</span>
+            }
+          </label>
+
+          <label class="form-field">
+            <span>Prix unitaire (DT) *</span>
+            <input type="number" formControlName="unitPrice" min="0" step="0.01" placeholder="9.99" />
+            @if (productForm.controls.unitPrice.touched && productForm.controls.unitPrice.invalid) {
+              <span class="error">Le prix doit être supérieur ou égal à 0.</span>
             }
           </label>
         </div>
@@ -534,19 +560,29 @@
       } @else if (alerts() && alerts().length > 0) {
         <div class="alerts-list">
           @for (alert of alerts(); track alert.id) {
-            <div class="alert-item" [class.low-weight]="alert.alertType === 'LOW_WEIGHT'">
+            <div class="alert-item" [class.low-weight]="alert.alertType === 'LOW_WEIGHT'" [class.product-error]="alert.alertType === 'PRODUCT_WITHOUT_STOCK_EXIT'">
               <div class="alert-icon">
                 @if (alert.alertType === 'LOW_WEIGHT') {
                   ⚠️
+                } @else if (alert.alertType === 'PRODUCT_WITHOUT_STOCK_EXIT') {
+                  ❌
                 } @else {
                   🔔
                 }
               </div>
               <div class="alert-info">
-                <h4>{{ alert.shelfName }}</h4>
+                <h4>
+                  @if (alert.alertType === 'PRODUCT_WITHOUT_STOCK_EXIT') {
+                    {{ alert.productName }}
+                  } @else {
+                    {{ alert.shelfName }}
+                  }
+                </h4>
                 <p class="alert-type">
                   @if (alert.alertType === 'LOW_WEIGHT') {
                     Poids faible - Besoin de remplissage
+                  } @else if (alert.alertType === 'PRODUCT_WITHOUT_STOCK_EXIT') {
+                    Produit entré en magasin sans sortie préalable du stock
                   } @else {
                     {{ alert.alertType }}
                   }
@@ -665,7 +701,7 @@
                 </div>
                 <div class="detail-row">
                   <span class="detail-label">Poids unitaire:</span>
-                  <span class="detail-value">{{ foundProduct()!.unitWeight }} kg</span>
+                  <span class="detail-value">{{ foundProduct()!.unitWeight }} g</span>
                 </div>
                 @if (foundProduct()!.description) {
                   <div class="detail-row full-width">
@@ -716,6 +752,7 @@
                     <div class="cart-item-info">
                       <span class="cart-item-name">{{ item.product.name }}</span>
                       <span class="cart-item-barcode">{{ item.product.barcode }}</span>
+                      <span class="cart-item-price">{{ formatPrice(item.product.unitPrice) }} DT/unité</span>
                     </div>
                     <div class="cart-item-qty">
                       <input
@@ -725,10 +762,22 @@
                         [value]="item.quantity"
                         (change)="updateCartItemQuantity(i, $any($event.target).valueAsNumber)"
                       />
+                      <span class="cart-item-subtotal">{{ formatPrice(item.quantity * (item.product.unitPrice || 0)) }} DT</span>
                       <button type="button" class="btn-remove" (click)="removeFromCart(i)">✕</button>
                     </div>
                   </div>
                 }
+              </div>
+
+              <div class="cart-summary">
+                <div class="summary-row">
+                  <span>Nombre d'articles:</span>
+                  <span class="summary-value">{{ cartTotal() }}</span>
+                </div>
+                <div class="summary-row total">
+                  <span>Total:</span>
+                  <span class="summary-value">{{ formatPrice(cartTotalPrice()) }} DT</span>
+                </div>
               </div>
 
               <div class="cart-actions">
@@ -785,18 +834,18 @@
           </label>
 
           <label class="form-field">
-            <span>Poids maximum (kg) *</span>
+            <span>Poids maximum (g) *</span>
             <input type="number" formControlName="maxWeight" min="0.1" step="0.1" placeholder="50" />
             @if (shelfForm.controls.maxWeight.touched && shelfForm.controls.maxWeight.invalid) {
-              <span class="error">Le poids maximum doit être supérieur à 0.</span>
+              <span class="error">Le poids maximum doit être au moins 100 grammes.</span>
             }
           </label>
 
           <label class="form-field">
-            <span>Seuil minimum (kg) *</span>
+            <span>Seuil minimum (g) *</span>
             <input type="number" formControlName="minThreshold" min="0.1" step="0.1" placeholder="5" />
             @if (shelfForm.controls.minThreshold.touched && shelfForm.controls.minThreshold.invalid) {
-              <span class="error">Le seuil minimum doit être supérieur à 0.</span>
+              <span class="error">Le seuil minimum doit être au moins 100 grammes.</span>
             }
           </label>
         </div>

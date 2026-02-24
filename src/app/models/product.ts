@@ -5,6 +5,7 @@ export interface Product {
   rfidTag: string;
   description: string;
   unitWeight: number;
+  unitPrice: number;
   createdAt: string;
 }
 
@@ -18,6 +19,7 @@ export interface ProductRegisterRequest {
   rfidTag: string;
   description: string;
   unitWeight: number;
+  unitPrice: number;
   esp32Id?: string;
 }
 

@@ -71,13 +71,14 @@ export class AdminDashboardComponent implements OnInit {
     barcode: ['', [Validators.required, Validators.maxLength(64)]],
     rfidTag: ['', [Validators.required, Validators.maxLength(128)]],
     description: ['', [Validators.maxLength(500)]],
-    unitWeight: [0.001, [Validators.required, Validators.min(0.001)]]
+    unitWeight: [1, [Validators.required, Validators.min(1)]],
+    unitPrice: [0, [Validators.required, Validators.min(0)]]
   });
 
   readonly shelfForm = this.formBuilder.nonNullable.group({
     name: ['', [Validators.required, Validators.maxLength(100)]],
-    maxWeight: [0, [Validators.required, Validators.min(0.1)]],
-    minThreshold: [0, [Validators.required, Validators.min(0.1)]]
+    maxWeight: [0, [Validators.required, Validators.min(100)]],
+    minThreshold: [0, [Validators.required, Validators.min(100)]]
   });
 
   // Sale form and related signals
@@ -94,6 +95,7 @@ export class AdminDashboardComponent implements OnInit {
   // Cart system for multiple products
   readonly cart = signal<Array<{ product: ProductWithStock; quantity: number }>>([]);
   readonly cartTotal = signal(0);
+  readonly cartTotalPrice = signal(0);
 
   ngOnInit(): void {
     this.loadDashboardData();
@@ -206,6 +208,8 @@ export class AdminDashboardComponent implements OnInit {
     }
     // Reload events after RFID event
     this.loadRecentEvents();
+    // Reload alerts to catch any validation errors (e.g., PRODUCT_WITHOUT_STOCK_EXIT)
+    this.loadAlerts();
     // Reload stats and shelves when weight changes (ENTRY/EXIT events)
     if (event.type === 'ENTRY' || event.type === 'EXIT') {
       this.loadStats();
@@ -256,7 +260,8 @@ export class AdminDashboardComponent implements OnInit {
       barcode: product.barcode,
       rfidTag: product.rfidTag,
       description: product.description,
-      unitWeight: product.unitWeight
+      unitWeight: product.unitWeight,
+      unitPrice: product.unitPrice
     });
     this.isFormOpen.set(true);
   }
@@ -278,6 +283,7 @@ export class AdminDashboardComponent implements OnInit {
       rfidTag: rawValue.rfidTag.trim(),
       description: rawValue.description?.trim() || '',
       unitWeight: Number(rawValue.unitWeight),
+      unitPrice: Number(rawValue.unitPrice),
       esp32Id: 'ESP32_STOCK'
     };
 
@@ -582,9 +588,12 @@ export class AdminDashboardComponent implements OnInit {
     this.alerts.update(current => [alert, ...current]);
     this.openAlertsCount.update(count => count + 1);
 
-    const message = alert.alertType === 'LOW_WEIGHT'
-      ? `Remplir l'etagere: ${alert.shelfName}`
-      : `Nouvelle alerte: ${alert.alertType}`;
+    let message = `Nouvelle alerte: ${alert.alertType}`;
+    if (alert.alertType === 'LOW_WEIGHT') {
+      message = `Remplir l'etagere: ${alert.shelfName}`;
+    } else if (alert.alertType === 'PRODUCT_WITHOUT_STOCK_EXIT') {
+      message = `Le produit "${alert.productName}" est entré en magasin sans passer par la sortie du stock. Il y a un problème à vérifier!`;
+    }
     this.showAlertToast({ message, alert });
     
     // Reload shelves on weight alerts to update current weight
@@ -619,7 +628,14 @@ export class AdminDashboardComponent implements OnInit {
   }
 
   resolveAlert(alert: Alert): void {
-    if (!confirm(`Marquer l'alerte "${alert.shelfName}" comme résolue?`)) {
+    let confirmMessage = 'Réoudre cette alerte?';
+    if (alert.alertType === 'LOW_WEIGHT') {
+      confirmMessage = `Marquer l'alerte "${alert.shelfName}" comme résolue?`;
+    } else if (alert.alertType === 'PRODUCT_WITHOUT_STOCK_EXIT') {
+      confirmMessage = `Marquer l'alerte pour "${alert.productName}" comme résolue?`;
+    }
+    
+    if (!confirm(confirmMessage)) {
       return;
     }
 
@@ -679,8 +695,10 @@ export class AdminDashboardComponent implements OnInit {
 
   updateCartTotal(): void {
     const items = this.cart();
-    const total = items.reduce((sum, item) => sum + item.quantity, 0);
-    this.cartTotal.set(total);
+    const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
+    const totalPrice = items.reduce((sum, item) => sum + (item.product.unitPrice * item.quantity), 0);
+    this.cartTotal.set(totalQuantity);
+    this.cartTotalPrice.set(Math.round(totalPrice * 100) / 100); // Round to 2 decimal places
   }
 
   searchProductByBarcode(): void {
@@ -797,7 +815,8 @@ export class AdminDashboardComponent implements OnInit {
 
     const saleItems = items.map(item => ({
       productId: item.product.id,
-      quantity: item.quantity
+      quantity: item.quantity,
+      totalPrice: item.product.unitPrice * item.quantity
     }));
 
     this.dashboardService
@@ -809,7 +828,8 @@ export class AdminDashboardComponent implements OnInit {
       .subscribe({
         next: (response) => {
           const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
-          this.saleSuccessMessage.set(`Vente enregistrée: ${totalItems} article(s) de ${items.length} produit(s) différent(s)`);
+          const totalRevenue = this.formatPrice(this.cartTotalPrice());
+          this.saleSuccessMessage.set(`✓ Vente enregistrée: ${totalItems} article(s) pour ${totalRevenue} DT (${items.length} produit(s) différent(s))`);
           this.resetSaleForm();
           this.loadStats();
           this.loadStoreStock();
@@ -824,5 +844,9 @@ export class AdminDashboardComponent implements OnInit {
 
   goBack(): void {
     this.selectedView.set('home');
+  }
+
+  formatPrice(price: number | undefined): string {
+    return parseFloat(((price || 0).toFixed(2))).toString();
   }
 }
