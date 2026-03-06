@@ -7,6 +7,7 @@ import { ProductWithStock, Product, ProductRegisterRequest, RfidWsMessage } from
 import { Shelf, ShelfRequest } from '../models/shelf';
 import { Alert } from '../models/alert';
 import { StoreStockWithDetails } from '../models/store-stock';
+import { SaleTransactionDto } from '../models/sale';
 
 export interface DashboardStats {
   totalProducts: number;
@@ -110,6 +111,10 @@ export class AdminDashboardService {
 
   recordMultipleSale(items: Array<{ productId: number; quantity: number }>): Observable<{ success: boolean; message: string }> {
     return this.http.post<{ success: boolean; message: string }>(`${this.apiBaseUrl}/api/sales/multiple`, { items });
+  }
+
+  getRecentSalesGrouped(limit: number = 50): Observable<{ success: boolean; message: string; data: SaleTransactionDto[] }> {
+    return this.http.get<{ success: boolean; message: string; data: SaleTransactionDto[] }>(`${this.apiBaseUrl}/api/sales/grouped?limit=${limit}`);
   }
 
   connectRfidWs(): void {

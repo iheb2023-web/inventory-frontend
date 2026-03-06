@@ -15,6 +15,7 @@ import { Product, ProductWithStock, ProductRegisterRequest, RfidWsMessage } from
 import { Shelf, ShelfRequest } from '../../models/shelf';
 import { Alert } from '../../models/alert';
 import { StoreStockWithDetails } from '../../models/store-stock';
+import { SaleTransactionDto } from '../../models/sale';
 
 @Component({
   selector: 'app-admin-dashboard',
@@ -96,6 +97,14 @@ export class AdminDashboardComponent implements OnInit {
   readonly cart = signal<Array<{ product: ProductWithStock; quantity: number }>>([]);
   readonly cartTotal = signal(0);
   readonly cartTotalPrice = signal(0);
+
+  // Sales view
+  readonly recentSales = signal<SaleTransactionDto[]>([]);
+  readonly isLoadingSales = signal(false);
+  readonly expandedSaleIndex = signal<number | null>(null);
+
+  // POS Sidebar
+  readonly isPosSidebarOpen = signal(false);
 
   ngOnInit(): void {
     this.loadDashboardData();
@@ -593,6 +602,8 @@ export class AdminDashboardComponent implements OnInit {
       message = `Remplir l'etagere: ${alert.shelfName}`;
     } else if (alert.alertType === 'PRODUCT_WITHOUT_STOCK_EXIT') {
       message = `Le produit "${alert.productName}" est entré en magasin sans passer par la sortie du stock. Il y a un problème à vérifier!`;
+    } else if (alert.alertType === 'UNKNOWN_PRODUCT') {
+      message = `Produit inconnu, il faut sauvegarder dans le stock`;
     }
     this.showAlertToast({ message, alert });
     
@@ -679,8 +690,111 @@ export class AdminDashboardComponent implements OnInit {
       this.loadAlerts();
     }
     if (view === 'sales') {
-      this.resetSaleForm();
+      this.loadSales();
     }
+  }
+
+  togglePosSidebar(): void {
+    this.isPosSidebarOpen.update(val => !val);
+  }
+
+  // Sales methods
+  loadSales(): void {
+    this.isLoadingSales.set(true);
+    this.dashboardService
+      .getRecentSalesGrouped(50)
+      .pipe(
+        finalize(() => this.isLoadingSales.set(false)),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe({
+        next: (response) => {
+          this.recentSales.set(response.data);
+        },
+        error: (err) => {
+          console.error('Error loading sales:', err);
+        }
+      });
+  }
+
+  toggleSaleDetails(index: number): void {
+    if (this.expandedSaleIndex() === index) {
+      this.expandedSaleIndex.set(null);
+    } else {
+      this.expandedSaleIndex.set(index);
+    }
+  }
+
+  printReceipt(sale: SaleTransactionDto): void {
+    // Create a simple receipt in a new window
+    const receiptContent = this.generateReceiptHTML(sale);
+    const printWindow = window.open('', '', 'width=600,height=400');
+    if (printWindow) {
+      printWindow.document.write(receiptContent);
+      printWindow.document.close();
+      setTimeout(() => {
+        printWindow.print();
+        printWindow.close();
+      }, 250);
+    }
+  }
+
+  private generateReceiptHTML(sale: SaleTransactionDto): string {
+    const date = new Date(sale.transactionDate).toLocaleString('fr-FR');
+    const itemsHTML = sale.items.map(item => `
+      <tr>
+        <td>${item.productName}</td>
+        <td style="text-align: center;">${item.quantity}</td>
+        <td style="text-align: right;">${item.unitPrice.toFixed(2)} DT</td>
+        <td style="text-align: right;">${item.totalPrice.toFixed(2)} DT</td>
+      </tr>
+    `).join('');
+
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 10px; }
+          .receipt { max-width: 400px; }
+          .header { text-align: center; margin-bottom: 20px; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+          th, td { padding: 8px; text-align: left; border-bottom: 1px solid #ddd; }
+          th { background-color: #f2f2f2; }
+          .total { font-weight: bold; font-size: 16px; }
+          .footer { text-align: center; margin-top: 20px; font-size: 12px; }
+        </style>
+      </head>
+      <body>
+        <div class="receipt">
+          <div class="header">
+            <h2>REÇU DE VENTE</h2>
+            <p>${date}</p>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Produit</th>
+                <th>Qté</th>
+                <th>P.U.</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemsHTML}
+            </tbody>
+          </table>
+          <div style="text-align: right; border-top: 2px solid #000; padding-top: 10px;">
+            <p class="total">Total: ${sale.totalPrice.toFixed(2)} DT</p>
+            <p>Articles: ${sale.totalQuantity}</p>
+          </div>
+          <div class="footer">
+            <p>Merci de votre visite!</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
   }
 
   // Sale methods
