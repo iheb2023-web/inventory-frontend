@@ -54,6 +54,10 @@ export class AdminDashboardService {
     return this.http.get<{ success: boolean; message: string; data: StoreStockWithDetails[] }>(`${this.apiBaseUrl}/api/store-stock`);
   }
 
+  deleteStoreStock(id: number): Observable<{ success: boolean; message: string }> {
+    return this.http.delete<{ success: boolean; message: string }>(`${this.apiBaseUrl}/api/store-stock/${id}`);
+  }
+
   getProductsWithStock(): Observable<{ success: boolean; message: string; data: ProductWithStock[] }> {
     return this.http.get<{ success: boolean; message: string; data: ProductWithStock[] }>(`${this.apiBaseUrl}/api/products/with-stock`);
   }

@@ -37,6 +37,7 @@ export class AdminDashboardComponent implements OnInit {
 
   readonly storeStock = signal<StoreStockWithDetails[]>([]);
   readonly isLoadingStoreStock = signal(false);
+  readonly isLoadingDeleteStoreStock = signal<number | null>(null);
 
   readonly products = signal<ProductWithStock[]>([]);
   readonly isLoadingProducts = signal(false);
@@ -207,6 +208,46 @@ export class AdminDashboardComponent implements OnInit {
         },
         error: (err) => {
           console.error('Error loading store stock:', err);
+        }
+      });
+  }
+
+  deleteStoreStockItem(item: StoreStockWithDetails): void {
+    if (!confirm(`Supprimer "${item.productName}" du stock magasin ?`)) {
+      return;
+    }
+
+    this.isLoadingDeleteStoreStock.set(item.id);
+    this.dashboardService
+      .deleteStoreStock(item.id)
+      .pipe(
+        finalize(() => this.isLoadingDeleteStoreStock.set(null)),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe({
+        next: (response) => {
+          if (response && response.success === false) {
+            const msg = response.message || 'Erreur lors de la suppression du stock magasin';
+            this.errorMessage.set(msg);
+            alert(msg);
+            setTimeout(() => this.errorMessage.set(null), 5000);
+            return;
+          }
+
+          this.successMessage.set('Produit supprimé du stock magasin avec succès!');
+          this.loadStoreStock();
+          this.loadStats();
+          setTimeout(() => this.successMessage.set(null), 3000);
+        },
+        error: (err) => {
+          const errorMsg =
+            err?.error?.message ||
+            err?.error?.error ||
+            'Erreur lors de la suppression du stock magasin';
+
+          this.errorMessage.set(errorMsg);
+          alert(errorMsg);
+          setTimeout(() => this.errorMessage.set(null), 5000);
         }
       });
   }
@@ -384,7 +425,17 @@ export class AdminDashboardComponent implements OnInit {
         takeUntilDestroyed(this.destroyRef)
       )
       .subscribe({
-        next: () => {
+        next: (response) => {
+          // Some backend paths may return 200 with success=false payload.
+          // Handle it explicitly so the user always sees the failure reason.
+          if (response && response.success === false) {
+            const msg = response.message || 'Erreur lors de la suppression du produit';
+            this.errorMessage.set(msg);
+            alert(msg);
+            setTimeout(() => this.errorMessage.set(null), 5000);
+            return;
+          }
+
           this.successMessage.set('Produit supprimé avec succès!');
           this.loadProducts();
           this.loadStats();
@@ -392,10 +443,14 @@ export class AdminDashboardComponent implements OnInit {
         },
         error: (err) => {
           console.error('Error deleting product:', err);
-          this.errorMessage.set(
-            err.error?.message || 'Erreur lors de la suppression du produit'
-          );
-          setTimeout(() => this.errorMessage.set(null), 3000);
+          const errorMsg =
+            err?.error?.message ||
+            err?.error?.error ||
+            'Erreur lors de la suppression du produit';
+
+          this.errorMessage.set(errorMsg);
+          alert(errorMsg);
+          setTimeout(() => this.errorMessage.set(null), 5000);
         }
       });
   }

@@ -1416,6 +1416,10 @@
   padding: 14px 20px;
   background: #f8fafc;
   border-top: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .update-time {
@@ -1425,6 +1429,33 @@
   font-size: 0.85rem;
   color: #64748b;
   font-weight: 500;
+}
+
+.store-delete-btn {
+  border: 1px solid #fecaca;
+  background: #fff1f2;
+  color: #b91c1c;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 120px;
+  transition: all 0.2s ease;
+}
+
+.store-delete-btn:hover:not(:disabled) {
+  background: #fee2e2;
+  border-color: #fca5a5;
+}
+
+.store-delete-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
 }
 
 /* Store Stock Section Specific */

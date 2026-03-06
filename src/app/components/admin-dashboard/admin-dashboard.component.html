@@ -233,6 +233,18 @@
                 
                 <div class="stock-card-footer">
                   <span class="update-time">🕒 {{ item.lastUpdated | date: 'dd/MM/yyyy à HH:mm' }}</span>
+                  <button
+                    class="store-delete-btn"
+                    (click)="deleteStoreStockItem(item)"
+                    [disabled]="isLoadingDeleteStoreStock() === item.id"
+                    title="Supprimer du magasin"
+                  >
+                    @if (isLoadingDeleteStoreStock() === item.id) {
+                      <span class="spinner-small"></span>
+                    } @else {
+                      🗑️ Supprimer
+                    }
+                  </button>
                 </div>
               </div>
             }
