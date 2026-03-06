@@ -627,19 +627,12 @@
 .refresh-btn:hover:not(:disabled) {
   background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
   border-color: #3b82f6;
-  transform: rotate(90deg);
   box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
 }
 
 .refresh-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
 }
 
 /* Table */
